@@ -1,9 +1,13 @@
 @echo off
 REM ============================================================
 REM  Gerber -> Altium Designer PCB converter
-REM  Double-click: a folder picker opens, no typing needed.
-REM  Or drag a Gerber folder / .zip onto this file.
-REM  Keep ASCII-only: cmd.exe mis-parses multibyte text.
+REM
+REM  HOW TO USE
+REM    Drag a Gerber FOLDER or a .zip file onto this .bat
+REM    (or onto its shortcut). Then it just works.
+REM
+REM  NOTE: keep this file ASCII-only (no Chinese) - cmd.exe
+REM        mis-parses multibyte text in parenthesis blocks.
 REM ============================================================
 setlocal
 
@@ -15,49 +19,66 @@ set "OUTDIR=%TOOL%out"
 title Gerber to Altium PCB
 cd /d "%TOOL%"
 
-echo.
-echo ============================================================
-echo   Gerber  -^>  Altium Designer PCB   reverse-engineering tool
-echo ============================================================
-echo.
+REM ================= no argument: just show how to drag =========
+if "%~1"=="" goto :howto
 
+REM ================= environment check =========================
 if not exist "%VP%" (
-    echo [ERROR] Python environment missing.
-    echo         Run setup-env.bat first.
+    echo.
+    echo [ERROR] Python environment is missing.
+    echo         Run setup-env.bat first, then try again.
     goto :done
 )
 if not exist "%TPL%" (
-    echo [ERROR] AD template missing: %TPL%
+    echo.
+    echo [ERROR] AD template is missing: %TPL%
     goto :done
 )
 
 set "SRC=%~1"
-if "%SRC%"=="" goto :picker
 set "SRC=%SRC:"=%"
 if not exist "%SRC%" (
+    echo.
     echo [ERROR] Path not found:
     echo         %SRC%
     goto :done
 )
 goto :run
 
-rem ---- folder picker (no typing needed) ----
-:picker
-echo Opening folder picker...
+REM ================= how-to screen ============================
+:howto
 echo.
-set "PICK="
-for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Select the Gerber folder'; if($d.ShowDialog() -eq 'OK'){Write-Output $d.SelectedPath}"`) do set "PICK=%%I"
-if not "%PICK%"=="" (
-    set "SRC=%PICK%"
-    goto :run
-)
+echo ============================================================
+echo   Gerber  -^>  Altium Designer PCB   reverse-engineering tool
+echo ============================================================
 echo.
-echo No folder selected. You can paste the path instead.
-set /p "SRC=Paste path to Gerber folder or .zip, then Enter: "
+echo   HOW TO USE
+echo.
+echo     1. Open the folder that holds your Gerber files
+echo        (the one containing .GTL / .GBL / .G1 ... files)
+echo.
+echo     2. Drag that FOLDER onto this window
+echo        ^(or onto the "gerber2ad" shortcut on your desktop^)
+echo.
+echo     3. Wait a few seconds - the .PcbDoc appears in the
+echo        "out" folder next to this file.
+echo.
+echo   Also works with a .zip that contains Gerber files.
+echo.
+echo   Alternative: type or paste the path below and press Enter.
+echo.
+set /p "SRC=Paste path (Enter = quit): "
+
 if "%SRC%"=="" goto :done
 set "SRC=%SRC:"=%"
+if not exist "%SRC%" (
+    echo.
+    echo [ERROR] Path not found:
+    echo         %SRC%
+    goto :done
+)
 
-rem ---- run conversion ----
+REM ================= run conversion ===========================
 :run
 for %%I in ("%SRC%") do set "BASE=%%~nI"
 if "%BASE%"=="" set "BASE=PCB"
