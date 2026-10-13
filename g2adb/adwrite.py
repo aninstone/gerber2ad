@@ -63,6 +63,15 @@ def m(v_mm: float, nd: int = 4) -> str:
     return s + "mil"
 
 
+def _pair_name(phys_id: int) -> str:
+    """物理层号 -> LAYERPAIR 用的层名(TOP/BOTTOM/MIDLAYERn)。"""
+    if phys_id == 1:
+        return "TOP"
+    if phys_id == 32:
+        return "BOTTOM"
+    return f"MIDLAYER{phys_id - 1}"
+
+
 class AdAsciiWriter:
     """基于模板输出 AD ASCII PcbDoc。"""
 
@@ -83,8 +92,16 @@ class AdAsciiWriter:
 
     # ------------------------------------------------------------ Board
     @staticmethod
-    def rewrite_board(lines: list, filename: str, outline_pts=None) -> list:
-        """替换模板首行的 FILENAME 与板框顶点。"""
+    def rewrite_board(lines: list, filename: str, outline_pts=None,
+                      copper=None) -> list:
+        """替换模板首行的 FILENAME、板框顶点，并按实际铜层重建层栈链。
+
+        ⚠ Board 记录共 **20 行**，层栈字段 `LAYERnNAME/PREV/NEXT` 与
+        `LAYERPAIR0*` **分散在这些行里**（实测：LAYER1/2 在第 1 行、
+        LAYER32 在第 7 行、LAYERPAIR0 在第 17 行）。所以层栈必须
+        **逐行全量替换**，只改第 0 行会完全无效 —— 表现为
+        "四层板在 AD 里仍显示两层，内层图元全部丢失"。
+        """
         out = []
         for i, ln in enumerate(lines):
             if i == 0:
@@ -102,8 +119,80 @@ class AdAsciiWriter:
                             "|BIGVISIBLEGRIDSIZE=100000.000", ln)
                 if outline_pts:
                     ln = AdAsciiWriter._set_outline(ln, outline_pts)
+            if copper and "RECORD=Board" in ln:
+                ln = AdAsciiWriter._set_stack(ln, copper)
             out.append(ln)
         return out
+
+    @staticmethod
+    def _set_stack(ln: str, copper) -> str:
+        """按实际铜层重建层栈链。
+
+        AD 用 LAYERnPREV / LAYERnNEXT 把启用层串成双向链表：
+          - PREV/NEXT 为 0 表示该层**不在层栈里**（即使名字非空也不算启用）
+          - 模板默认是 2 层：LAYER1(Top, NEXT=32) <-> LAYER32(Bottom, PREV=1)，
+            所有 Mid-Layer 的 PREV/NEXT 都是 0（未启用）
+
+        所以多层板必须重写这条链，否则 AD 打开后内层图元无处安放 —— 图元虽已
+        写入文件，但 AD 找不到对应层，等于全部丢弃（表现为"四层板变两层板"）。
+
+        copper 形如 ['TOP','MID1','BOTTOM']；对应 AD 的
+        LAYER1=Top Layer, LAYER2..31=Mid-Layer 1..30, LAYER32=Bottom Layer。
+        """
+        n_cu = len(copper)
+
+        # 物理层号: TOP->1, MIDk->(k+1), BOTTOM->32
+        def phys(lay):
+            if lay == "TOP":
+                return 1
+            if lay == "BOTTOM":
+                return 32
+            m = re.match(r"MID(\d+)$", lay)
+            return (int(m.group(1)) + 1) if m else None
+
+        ids = []
+        for lay in copper:
+            p = phys(lay)
+            if p and p not in ids:
+                ids.append(p)
+
+        # 未启用的内层：名字置空 + PREV/NEXT 清零
+        enabled = set(ids)
+        for k in range(2, 32):
+            ln = re.sub(rf"\|LAYER{k}NAME=[^|]*", f"|LAYER{k}NAME=", ln)
+            ln = re.sub(rf"\|LAYER{k}PREV=[^|]*", f"|LAYER{k}PREV=0", ln)
+            ln = re.sub(rf"\|LAYER{k}NEXT=[^|]*", f"|LAYER{k}NEXT=0", ln)
+
+        # 启用层：写名字 + 串链
+        for i, pid in enumerate(ids):
+            if pid == 1:
+                nm = "Top Layer"
+            elif pid == 32:
+                nm = "Bottom Layer"
+            else:
+                nm = f"Mid-Layer {pid - 1}"
+            prev = ids[i - 1] if i > 0 else 0
+            nxt = ids[i + 1] if i < len(ids) - 1 else 0
+            ln = re.sub(rf"\|LAYER{pid}NAME=[^|]*",
+                        f"|LAYER{pid}NAME={nm}", ln)
+            ln = re.sub(rf"\|LAYER{pid}PREV=[^|]*",
+                        f"|LAYER{pid}PREV={prev}", ln)
+            ln = re.sub(rf"\|LAYER{pid}NEXT=[^|]*",
+                        f"|LAYER{pid}NEXT={nxt}", ln)
+
+        # 顶部/底部覆铜等非铜层脱离层栈链（PREV/NEXT=0）
+        for k in list(range(33, 83)):
+            ln = re.sub(rf"\|LAYER{k}PREV=[^|]*", f"|LAYER{k}PREV=0", ln)
+            ln = re.sub(rf"\|LAYER{k}NEXT=[^|]*", f"|LAYER{k}NEXT=0", ln)
+
+        # 层对(信号层对)也要匹配：Top<->Bottom
+        if len(ids) >= 2:
+            lo, hi = ids[0], ids[-1]
+            ln = re.sub(r"\|LAYERPAIR0LOW=[^|]*",
+                        f"|LAYERPAIR0LOW={_pair_name(lo)}", ln)
+            ln = re.sub(r"\|LAYERPAIR0HIGH=[^|]*",
+                        f"|LAYERPAIR0HIGH={_pair_name(hi)}", ln)
+        return ln
 
     @staticmethod
     def _set_outline(ln: str, pts) -> str:

@@ -501,7 +501,8 @@ def main(argv=None):
     w = AdAsciiWriter(tpl)
     lines = w.rewrite_board(w.load_template_lines(),
                             filename=os.path.basename(args.out),
-                            outline_pts=outline)
+                            outline_pts=outline,
+                            copper=cu)
 
     # 网络
     for nid in sorted(names):
