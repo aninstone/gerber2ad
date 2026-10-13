@@ -1,0 +1,7 @@
+# bat 脚本用 CRLF，保证 Windows 下可用
+*.bat text eol=crlf
+
+# PcbDoc 是 ASCII 文本
+*.PcbDoc text eol=crlf
+*.py text eol=lf
+*.md text eol=lf

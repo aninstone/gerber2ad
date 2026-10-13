@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+env/
+venv/
+.venv/
+
+# 输出
+out/
+*.PcbDoc
+!AD_template.PcbDoc
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
