@@ -247,7 +247,10 @@ class AdAsciiWriter:
         s = (f"|RECORD=Pad|INDEXFORSAVE={self.next_index()}"
              f"|SELECTION=FALSE|LAYER={L}|LOCKED=FALSE"
              f"|POLYGONOUTLINE=FALSE|USERROUTED=TRUE|UNIONINDEX=0"
-             f"|NAME={name or '0'}"
+             # ⚠ Pad 的 NAME 是"引脚号"。Gerber 还原出的焊盘无元件归属，
+             # 填 '0' 会让 AD 在板上显示一堆 "0" 字样（满屏 0 Net1）。
+             # 留空 = 自由焊盘，AD 不显示文字。
+             f"|NAME={name}"
              f"|X={m(x)}|Y={m(y)}|XSIZE={m(w)}|YSIZE={m(h)}|SHAPE={sh}")
         if hole > 0:
             s += (f"|HOLESIZE={m(hole)}"
@@ -273,8 +276,13 @@ class AdAsciiWriter:
         return (f"|RECORD=Net|ID={net_id}|SELECTION=FALSE|NAME={name}"
                 f"|VISIBLE=TRUE|COLOR=8421376")
 
-    def polygon(self, layer, pts, net=0, pour=True) -> str:
-        """铜皮/填充区：AD 用 RECORD=Polygon + KINDn/VXn 顶点族。"""
+    def polygon(self, layer, pts, net=0, pour=False) -> str:
+        """铜皮/填充区：AD 用 RECORD=Polygon + KINDn/VXn 顶点族。
+
+        pour=False 时 POLYGONOUTLINE=TRUE，AD 显示为轮廓并按 outline 着色，
+        不会自动灌铜/合并相邻多边形 —— 适合"从 Gerber 还原最终铜形"，
+        因为 Gerber 里的铜形已经是最终结果，再让 AD 重灌一次会糊成一片。
+        """
         L = LAYER_NAME.get(layer, layer)
         p = list(pts)
         if p[0] != p[-1]:
@@ -287,9 +295,9 @@ class AdAsciiWriter:
                        f"|EA{i}= 0.00000000000000E+0000|R{i}=0mil")
         return (f"|RECORD=Polygon|ID={self.next_index()}"
                 f"|SELECTION=FALSE|LAYER={L}|LOCKED=FALSE"
-                f"|POLYGONOUTLINE={'FALSE' if pour else 'TRUE'}"
+                f"|POLYGONOUTLINE={'TRUE' if not pour else 'FALSE'}"
                 f"|USERROUTED=TRUE|PRIMITIVELOCK=TRUE|POLYGONTYPE=Polygon"
-                f"|POUROVER=TRUE|REMOVEDEAD=TRUE"
+                f"|POUROVER={'TRUE' if pour else 'FALSE'}|REMOVEDEAD=TRUE"
                 f"|GRIDSIZE=20mil|TRACKWIDTH=8mil|HATCHSTYLE=90Degree"
                 f"|USEOCTAGONS=FALSE|MINPRIMLENGTH=3mil"
                 f"|NET={net}" + "".join(seg))

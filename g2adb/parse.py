@@ -302,7 +302,11 @@ def parse_gerber_layer(path: str, layer: str):
             except Exception:
                 continue
             if len(pts) >= 3:
-                regions.append(Region(layer, pts))
+                # ⚠ 必须保留极性：LPD(True)=实心，LPC(False)=挖空。
+                # 铺铜层里大量 LPC 区域是走线间隙/避空，
+                # 当成实心画出来会把整个板铺满。
+                dark = getattr(o, "polarity_dark", True)
+                regions.append(Region(layer, pts, dark=dark))
 
     return tracks, arcs, flashes, regions
 

@@ -528,9 +528,19 @@ def main(argv=None):
                                _ang(a, 0), _ang(a, 1), a.width))
 
     # 填充区(Gerber Region -> AD Polygon)
+    # ⚠ 只输出 **实心(LPD)** 区域。Gerber 铺铜层里的 LPC(挖空)区域是
+    # 走线间隙/避空区，画成实心会把整块板铺满(实测糊成一片)。
+    # 另外 pour=False：Gerber 里已是"最终铜形"，不需要 AD 重新灌铜，
+    # 开启 POUROVER 反而会让 AD 把相邻多边形并成一整块。
+    n_dark = n_clear = 0
     for lay, regs in regions.items():
         for r in regs:
-            lines.append(w.polygon(lay, r.pts))
+            if r.dark:
+                n_dark += 1
+                lines.append(w.polygon(lay, r.pts, pour=False))
+            else:
+                n_clear += 1
+    print(f"铺铜区域: 实心 {n_dark} 个(已输出)  挖空 {n_clear} 个(按 Gerber 语义忽略)")
 
     # 丝印 / 阻焊 / 锡膏 / 机械 线
     for t in tracks:

@@ -68,6 +68,10 @@ class Region:
     layer: str
     pts: list
     net: int = -1
+    # Gerber 极性：True=LPD(实心/绘制)，False=LPC(挖空/清除)。
+    # ⚠ 铺铜层里 LPC 区域是"从铜面里挖掉"的部分（走线间隙、避空），
+    # 若当实心画出去会导致整个板被铺铜盖死。
+    dark: bool = True
 
 
 @dataclass
