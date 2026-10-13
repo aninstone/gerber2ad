@@ -1,11 +1,11 @@
 @echo off
 REM ============================================================
-REM  Gerber -> Altium Designer PCB  (one-click converter)
-REM  USAGE: drag a Gerber FOLDER or .zip onto this .bat file
-REM  NOTE: keep this file ASCII-only (no Chinese) - cmd.exe
-REM        mis-parses multibyte text in parentheses blocks.
+REM  Gerber -> Altium Designer PCB converter
+REM  Double-click: a folder picker opens, no typing needed.
+REM  Or drag a Gerber folder / .zip onto this file.
+REM  Keep ASCII-only: cmd.exe mis-parses multibyte text.
 REM ============================================================
-setlocal enabledelayedexpansion
+setlocal
 
 set "TOOL=%~dp0"
 set "VP=%TOOL%env\Scripts\python.exe"
@@ -13,6 +13,7 @@ set "TPL=%TOOL%AD_template.PcbDoc"
 set "OUTDIR=%TOOL%out"
 
 title Gerber to Altium PCB
+cd /d "%TOOL%"
 
 echo.
 echo ============================================================
@@ -21,39 +22,48 @@ echo ============================================================
 echo.
 
 if not exist "%VP%" (
-    echo [ERROR] Python env not found: %VP%
-    echo         Run "setup-env.bat" first.
-    echo.
-    pause
-    exit /b 1
+    echo [ERROR] Python environment missing.
+    echo         Run setup-env.bat first.
+    goto :done
 )
 if not exist "%TPL%" (
-    echo [ERROR] AD template not found: %TPL%
-    echo.
-    pause
-    exit /b 1
+    echo [ERROR] AD template missing: %TPL%
+    goto :done
 )
 
 set "SRC=%~1"
-if "%SRC%"=="" (
-    set /p "SRC=Paste path to Gerber folder or .zip, then Enter: "
-)
-if "%SRC%"=="" (
-    echo [ERROR] no input path
-    pause
-    exit /b 1
-)
+if "%SRC%"=="" goto :picker
 set "SRC=%SRC:"=%"
 if not exist "%SRC%" (
-    echo [ERROR] path not found: %SRC%
-    pause
-    exit /b 1
+    echo [ERROR] Path not found:
+    echo         %SRC%
+    goto :done
 )
+goto :run
 
+rem ---- folder picker (no typing needed) ----
+:picker
+echo Opening folder picker...
+echo.
+set "PICK="
+for /f "usebackq delims=" %%I in (`powershell -NoProfile -Command "Add-Type -AssemblyName System.Windows.Forms; $d=New-Object System.Windows.Forms.FolderBrowserDialog; $d.Description='Select the Gerber folder'; if($d.ShowDialog() -eq 'OK'){Write-Output $d.SelectedPath}"`) do set "PICK=%%I"
+if not "%PICK%"=="" (
+    set "SRC=%PICK%"
+    goto :run
+)
+echo.
+echo No folder selected. You can paste the path instead.
+set /p "SRC=Paste path to Gerber folder or .zip, then Enter: "
+if "%SRC%"=="" goto :done
+set "SRC=%SRC:"=%"
+
+rem ---- run conversion ----
+:run
 for %%I in ("%SRC%") do set "BASE=%%~nI"
 if "%BASE%"=="" set "BASE=PCB"
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
 
+echo.
 echo Input : %SRC%
 echo Output: %OUTDIR%\%BASE%.PcbDoc
 echo.
@@ -65,22 +75,23 @@ echo.
 if errorlevel 1 (
     echo.
     echo ============================================================
-    echo   [FAILED] see error above
+    echo   [FAILED] Conversion failed. Error shown above.
     echo ============================================================
-    echo.
-    pause
-    exit /b 1
+    goto :done
 )
 
 echo.
 echo ============================================================
 echo   [DONE] %OUTDIR%\%BASE%.PcbDoc
 echo.
-echo   Open it in Altium Designer. Net names are inferred
-echo   (Net1/Net2...), rename them against your schematic.
+echo   Open it in Altium Designer.
+echo   Net names are inferred (Net1/Net2...), rename them
+echo   against your schematic.
 echo ============================================================
 echo.
 
-explorer "%OUTDIR%"
-pause
+:done
+echo.
+echo Press any key to close this window...
+pause >nul
 endlocal
