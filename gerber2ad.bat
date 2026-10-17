@@ -1,13 +1,8 @@
 @echo off
 REM ============================================================
-REM  Gerber -> Altium Designer PCB converter
-REM
-REM  HOW TO USE
-REM    Drag a Gerber FOLDER or a .zip file onto this .bat
-REM    (or onto its shortcut). Then it just works.
-REM
-REM  NOTE: keep this file ASCII-only (no Chinese) - cmd.exe
-REM        mis-parses multibyte text in parenthesis blocks.
+REM  Gerber - Altium Designer PCB converter
+REM  Drag a Gerber FOLDER or a .zip onto this file.
+REM  Or double-click and paste a path.
 REM ============================================================
 setlocal
 
@@ -19,10 +14,8 @@ set "OUTDIR=%TOOL%out"
 title Gerber to Altium PCB
 cd /d "%TOOL%"
 
-REM ================= no argument: just show how to drag =========
 if "%~1"=="" goto :howto
 
-REM ================= environment check =========================
 if not exist "%VP%" (
     echo.
     echo [ERROR] Python environment is missing.
@@ -31,12 +24,15 @@ if not exist "%VP%" (
 )
 if not exist "%TPL%" (
     echo.
-    echo [ERROR] AD template is missing: %TPL%
+    echo [ERROR] AD template is missing:
+    echo         %TPL%
     goto :done
 )
 
 set "SRC=%~1"
+if not defined SRC goto :howto
 set "SRC=%SRC:"=%"
+if not defined SRC goto :howto
 if not exist "%SRC%" (
     echo.
     echo [ERROR] Path not found:
@@ -45,7 +41,6 @@ if not exist "%SRC%" (
 )
 goto :run
 
-REM ================= how-to screen ============================
 :howto
 echo.
 echo ============================================================
@@ -54,23 +49,21 @@ echo ============================================================
 echo.
 echo   HOW TO USE
 echo.
-echo     1. Open the folder that holds your Gerber files
-echo        (the one containing .GTL / .GBL / .G1 ... files)
+echo     Drag a Gerber FOLDER or a .zip onto this window,
+echo     then press Enter. The .PcbDoc appears in the "out"
+echo     folder next to this file.
 echo.
-echo     2. Drag that FOLDER onto this window
-echo        ^(or onto the "gerber2ad" shortcut on your desktop^)
+echo   The folder should contain .GTL / .GBL / .G1 files,
+echo   or a zip that contains them.
 echo.
-echo     3. Wait a few seconds - the .PcbDoc appears in the
-echo        "out" folder next to this file.
-echo.
-echo   Also works with a .zip that contains Gerber files.
-echo.
-echo   Alternative: type or paste the path below and press Enter.
-echo.
-set /p "SRC=Paste path (Enter = quit): "
+set /p "SRC=Drag path here, or paste it, then Enter: "
 
-if "%SRC%"=="" goto :done
+REM Check with `if not defined`, never with if "%SRC%"=="" :
+REM a pasted path arrives WITH quotes, and the classic check
+REM would expand to if ""D:\..."" == "" which crashes cmd.
+if not defined SRC goto :done
 set "SRC=%SRC:"=%"
+if not defined SRC goto :done
 if not exist "%SRC%" (
     echo.
     echo [ERROR] Path not found:
@@ -78,10 +71,9 @@ if not exist "%SRC%" (
     goto :done
 )
 
-REM ================= run conversion ===========================
 :run
 for %%I in ("%SRC%") do set "BASE=%%~nI"
-if "%BASE%"=="" set "BASE=PCB"
+if not defined BASE set "BASE=PCB"
 if not exist "%OUTDIR%" mkdir "%OUTDIR%"
 
 echo.
@@ -106,8 +98,7 @@ echo ============================================================
 echo   [DONE] %OUTDIR%\%BASE%.PcbDoc
 echo.
 echo   Open it in Altium Designer.
-echo   Net names are inferred (Net1/Net2...), rename them
-echo   against your schematic.
+echo   Net names are inferred, rename them per schematic.
 echo ============================================================
 echo.
 
