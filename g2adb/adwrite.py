@@ -237,19 +237,28 @@ class AdAsciiWriter:
                 f"|SUBPOLYINDEX=0|NET={net}")
 
     def pad(self, layer, x, y, w, h, shape="ROUND", hole=0.0,
-            plated=True, net=0, name="") -> str:
-        """Pad：严格按 AD 原生字段序列。"""
+            plated=True, net=0, name="", comp=None) -> str:
+        """Pad：严格按 AD 原生字段序列。
+
+        comp: 元件 ID（Component 记录的 |ID= 值，1-based）。
+              0 = 自由焊盘。None = 不写该字段。
+        ⚠ 必须始终有 |COMPONENT= 字段：OpenBoardView 解析器遇无此字段的
+        Pad 会直接丢弃；COMPONENT=0 在 OBV 中不匹配任何元件(+1 后从 2 起)
+        且在 AD 中指向不存在的 ID=0，两种解析器下都是"自由焊盘"。
+        NAME = 引脚号；自由焊盘留空（填 '0' 会满屏显示 0）。
+        """
         L = LAYER_NAME.get(layer, layer)
         if hole > 0:
             L = "MULTILAYER"
         sh = {"ROUND": "ROUND", "RECTANGLE": "RECTANGLE",
               "OBLONG": "RECTANGLE", "OCTAGON": "OCTAGON"}.get(shape, "ROUND")
+        if comp is None:
+            comp = 0          # 缺省也写 0：OBV 丢无 COMPONENT 的 Pad
+        comp_field = f"|COMPONENT={comp}"
         s = (f"|RECORD=Pad|INDEXFORSAVE={self.next_index()}"
              f"|SELECTION=FALSE|LAYER={L}|LOCKED=FALSE"
              f"|POLYGONOUTLINE=FALSE|USERROUTED=TRUE|UNIONINDEX=0"
-             # ⚠ Pad 的 NAME 是"引脚号"。Gerber 还原出的焊盘无元件归属，
-             # 填 '0' 会让 AD 在板上显示一堆 "0" 字样（满屏 0 Net1）。
-             # 留空 = 自由焊盘，AD 不显示文字。
+             f"{comp_field}"
              f"|NAME={name}"
              f"|X={m(x)}|Y={m(y)}|XSIZE={m(w)}|YSIZE={m(h)}|SHAPE={sh}")
         if hole > 0:
@@ -271,6 +280,31 @@ class AdAsciiWriter:
             s += f"|PADXOFFSET{i}=0mil|PADYOFFSET{i}=0mil"
         s += f"|PADJUMPERID=0|NET={net}"
         return s
+
+    def component(self, x, y, pattern, designator, idx, layer="TOP") -> str:
+        """元件记录。
+
+        ⚠ 字段顺序有讲究：OpenBoardView 的 ADFile.cpp 顺序推进 strstr 找
+        |ID= -> |LAYER= -> |X= -> |Y= -> |ROTATION= -> |SOURCEDESIGNATOR=，
+        且 **必须有 |ID=**（否则整个元件被跳过）。
+        ID 从 1 开始；Pad 的 COMPONENT 写相同值即归属（两边数值相等即匹配，
+        OBV 与 KiCad 二进制语义各自兼容，见 pad() 注释）。
+        """
+        L = LAYER_NAME.get(layer, layer)
+        cid = idx + 1
+        return (f"|RECORD=Component"
+                f"|ID={cid}"
+                f"|SELECTION=FALSE|LAYER={L}|LOCKED=FALSE"
+                f"|POLYGONOUTLINE=FALSE|USERROUTED=TRUE|KEEPOUT=FALSE"
+                f"|PRIMITIVELOCK=TRUE"
+                f"|X={m(x)}|Y={m(y)}"
+                f"|ROTATION= 0.00000000000000E+0000"
+                f"|SOURCEDESIGNATOR={designator}"
+                f"|PATTERN={pattern}"
+                f"|NAMEON=TRUE|COMMENTON=FALSE|GROUPNUM=0|COUNT=0"
+                f"|NAMEAUTOPOSITION=1|COMMENTAUTOPOSITION=3|UNIONINDEX=0"
+                f"|UNIQUEID=GR{cid:06d}"
+                f"|JUMPERSVISIBLE=TRUE|AREA=0.000000")
 
     def net(self, net_id: int, name: str) -> str:
         return (f"|RECORD=Net|ID={net_id}|SELECTION=FALSE|NAME={name}"

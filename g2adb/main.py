@@ -16,6 +16,7 @@ import tempfile
 import zipfile
 
 from . import parse as P
+from . import footprints as F
 from .adwrite import AdAsciiWriter
 from .model import Arc, Drill, Flash, Pad, Region, Track
 from .nets import DSU, dist_point_seg, seg_touches_pad, pad_touches_pad, TOL
@@ -421,6 +422,10 @@ def main(argv=None):
     ap.add_argument("--template", required=True,
                     help="经 AD 验证可打开的 ASCII PcbDoc 模板文件")
     ap.add_argument("--no-nets", action="store_true", help="跳过网络推断")
+    ap.add_argument("--no-components", action="store_true",
+                    help="跳过元件还原(焊盘保持自由)")
+    ap.add_argument("--group-gap", type=float, default=0.9,
+                    help="元件聚类间隙阈值 mm (默认 0.9)")
     ap.add_argument("--drill-drawing", action="store_true",
                     help="保留钻孔图/钻孔示意层(默认跳过，文件很大且无用)")
     ap.add_argument("--tol", type=float, default=TOL)
@@ -493,6 +498,20 @@ def main(argv=None):
     # 板框多边形(由 GKO 的线段+圆弧串成闭环)
     outline = build_outline(tracks, arcs)
 
+    # 元件还原：焊盘聚类 -> Component（封装/位号/引脚号）
+    comps = []
+    free_pads = [True] * len(pads)
+    if not args.no_components:
+        comps, free_pads = F.group_components(pads, mech_holes,
+                                              tol_gap=args.group_gap)
+        kinds = {}
+        for c in comps:
+            kinds[c.pattern] = kinds.get(c.pattern, 0) + 1
+        top = sorted(kinds.items(), key=lambda t: -t[1])[:8]
+        print(f"元件还原: {len(comps)} 个元件 "
+              f"(自由焊盘 {sum(free_pads)} 个)\n"
+              f"   封装分布: " + ", ".join(f"{k}x{v}" for k, v in top))
+
     # 输出：模板基底 + 追加图元
     tpl = args.template
     if not os.path.isfile(tpl):
@@ -508,11 +527,21 @@ def main(argv=None):
     for nid in sorted(names):
         lines.append(w.net(nid, names[nid]))
 
-    # 焊盘(铜 + 机械孔)
+    # 元件记录：ID 从 1 起；Pad 的 COMPONENT 写相同值（0=自由焊盘）
+    comp_of_pad = {}
+    for ci, c in enumerate(comps):
+        lines.append(w.component(c.x, c.y, c.pattern,
+                                 f"REF{ci + 1}", ci))
+        for pi in c.pads:
+            comp_of_pad[pi] = (ci + 1, c.pin_names.get(pi, ""))
+
+    # 焊盘(铜 + 机械孔)：归属元件的带 COMPONENT/NAME
     for i, p in enumerate(pads):
+        ci, pin = comp_of_pad.get(i, (None, ""))
         lines.append(w.pad(p.layer, p.x, p.y, p.w, p.h, p.shape,
                            hole=p.hole, plated=p.plated,
-                           net=pad_net.get(i, 0)))
+                           net=pad_net.get(i, 0),
+                           name=pin, comp=ci))
     for h in mech_holes:
         lines.append(w.pad("MECHANICAL1", h.x, h.y, h.d, h.d, "ROUND",
                            hole=h.d, plated=False, net=0))
