@@ -62,9 +62,19 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ---- create desktop shortcut (best effort) ----
+echo.
+echo Creating desktop shortcut...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%TOOL%make-shortcut.ps1"
+if errorlevel 1 (
+    echo [WARN] shortcut not created - drag Gerber folders onto
+    echo        gerber2ad.bat directly, it works the same.
+)
+
 echo.
 echo ============================================================
-echo   [DONE] Now drag a Gerber folder onto gerber2ad.bat
+echo   [DONE] Drag a Gerber folder onto the desktop icon
+echo          (or onto gerber2ad.bat) to convert.
 echo ============================================================
 echo.
 pause
